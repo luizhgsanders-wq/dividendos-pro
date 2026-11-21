@@ -1,0 +1,30 @@
+DIVIDENDOS PRO — VERSÃO 1.1
+
+A carteira começa totalmente vazia e zerada. Nenhum ativo, saldo, compra ou dividendo é pré-cadastrado.
+
+Cadastro de operações:
+- Corretora (Nubank ou Inter)
+- Código do ativo
+- Compra ou venda
+- Data da operação
+- Quantidade
+- Preço por unidade
+- Taxas/custos opcionais
+
+O app calcula quantidade e preço médio ponderado nas compras. Não permite vender mais cotas do que há na carteira.
+
+Arquivos:
+- index.html: aplicativo
+- manifest.webmanifest e sw.js: suporte PWA / cache básico
+
+PUBLICAÇÃO GRATUITA:
+1. Crie um repositório público no GitHub.
+2. Envie os três arquivos para a raiz.
+3. Em Settings > Pages, escolha Deploy from a branch, branch main, pasta /(root).
+4. Abra o endereço gerado no Safari do iPhone.
+5. Compartilhar > Adicionar à Tela de Início.
+
+DADOS ONLINE:
+- O botão de atualização tenta consultar cotações de FIIs pela brapi.dev. A disponibilidade, limites, CORS e cobertura podem mudar.
+- Proventos precisam ser conferidos em comunicados oficiais no Fundos.NET/B3 e cadastrados na primeira versão.
+- Dados e operações ficam armazenados localmente no Safari. Exporte backup periodicamente.
