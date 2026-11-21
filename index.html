@@ -34,9 +34,17 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:22px 5px}
 <div class="notice">Sua carteira começa totalmente zerada. Os saldos só aparecem depois que você cadastrar suas operações.</div>
 </section>
 <section id="portfolio" class="hidden">
+<div class="section-title">Adicionar ativo à carteira</div>
+<div class="card">
+<div class="formgrid">
+<div class="field"><label>Ticker brasileiro</label><input id="lookupTicker" placeholder="Ex.: CPTS11, PETR4, MXRF11" autocapitalize="characters"></div>
+<div class="field"><label>Corretora</label><select id="lookupBroker"><option>Nubank</option><option>Inter</option><option>Outra</option></select></div>
+</div><div class="actions"><button onclick="lookupAsset()">Buscar ativo online</button></div>
+<div id="lookupResult" class="small muted" style="margin-top:10px">Digite um ticker para buscar nome, tipo e dados disponíveis.</div>
+</div>
 <div class="row"><div class="section-title">Ativos cadastrados</div><button onclick="showTab('trades')">+ Compra</button></div>
 <div class="card" id="assetList"></div>
-<div class="notice">A carteira começa vazia. Cadastre cada compra ou venda para formar seu histórico e calcular o preço médio.</div>
+<div class="notice">A carteira começa vazia. A busca online identifica o ativo; para ele entrar na sua carteira, registre uma compra. Preços disponíveis são de fechamento, não intradiários.</div>
 </section>
 <section id="income" class="hidden">
 <div class="row"><div class="section-title">Proventos e calendário</div><button onclick="openIncomeForm()">+ Registrar</button></div>
@@ -72,9 +80,9 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:22px 5px}
 <p id="refreshStatus" class="small muted">Ainda não foi feita consulta nesta sessão.</p>
 </div>
 <div class="section-title">Fontes de referência</div><div class="card small">
-<p><b>FIIs brasileiros:</b> comunicados oficiais e informes periódicos no Fundos.NET / B3 e documentos da CVM.</p>
+<p><b>FIIs e ações:</b> consulta via Dados B3, com dados compilados da CVM e do COTAHIST da B3. A API pública sem chave tem limites por IP.</p>
 <p><a href="https://fnet.bmfbovespa.com.br/fnet/publico/" target="_blank">Fundos.NET — comunicados oficiais</a></p>
-<p><a href="https://dadosb3.com/fiis/CPTS11" target="_blank">Dados B3 — CPTS11</a></p>
+<p><a href="https://dadosb3.com/fiis/CPTS11" target="_blank">Dados B3 — CPTS11</a></p><p><a href="https://dadosb3.com/api?lang=pt" target="_blank">Documentação da API Dados B3</a></p>
 <p><a href="https://brfiis.com.br/fundos/CPTS11/proventos" target="_blank">BrFiis — histórico de proventos CPTS11</a></p>
 <p><b>Mercado dos EUA:</b> cotações por símbolo podem depender de serviços terceiros.</p>
 </div>
@@ -89,7 +97,7 @@ income:[],
 trades:[],
 lastRefresh:null
 }
-let data;try{data=JSON.parse(localStorage.getItem("divpro_data"))||seed}catch(e){data=seed}
+let data;try{data=JSON.parse(localStorage.getItem("divpro_data"))||seed}catch(e){data=seed}data.lookupCache=data.lookupCache||{};
 function persist(){localStorage.setItem("divpro_data",JSON.stringify(data));render()}
 function money(v,c="BRL"){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:c}).format(v||0)}
 function fmtDate(s){if(!s)return "—";return new Date(s+"T12:00:00").toLocaleDateString("pt-BR")}
@@ -107,7 +115,7 @@ let yr=confirmed.filter(x=>x.date&&x.date.startsWith(new Date().getFullYear())).
 document.getElementById("yearly").textContent=money(yr);
 let upcoming=data.income.filter(x=>x.status==="confirmado"&&x.date>=new Date().toISOString().slice(0,10)).sort((a,b)=>a.date.localeCompare(b.date));
 document.getElementById("upcoming").innerHTML=upcoming.length?upcoming.map(x=>`<div class="row listitem"><div><b>${x.ticker}</b><div class="small muted">${fmtDate(x.date)} · ${x.status}</div></div><div class="value"><b class="green">${money(x.per*(x.qty??(data.assets.find(a=>a.ticker===x.ticker)?.qty||0)))}</b><small>${money(x.per)} / cota</small></div></div>`).join(""):"<p class='muted small'>Nenhum pagamento cadastrado ainda.</p>";
-let assetHtml=data.assets.map(a=>`<div class="row listitem"><div class="asset"><span class="ticker">${a.ticker}</span><div><b>${a.broker}</b><small>${a.qty||"—"} unidades · PM ${a.avg?money(a.avg,a.currency):"não informado"}</small></div></div><div class="value"><b>${money(value(a),a.currency)}</b><small>${a.price?money(a.price,a.currency)+" / un.":"valor informado"}</small></div></div>`).join("");
+let assetHtml=data.assets.map(a=>`<div class="row listitem"><div class="asset"><span class="ticker">${a.ticker}</span><div><b>${a.name||a.broker}</b><small>${a.broker} · ${a.qty||0} unidades · PM ${a.avg?money(a.avg,a.currency):"não informado"}</small></div></div><div class="value"><b>${money(value(a),a.currency)}</b><small>${a.price?money(a.price,a.currency)+" / un.":"valor informado"}</small></div></div>`).join("");
 document.getElementById("summaryAssets").innerHTML=assetHtml;
 document.getElementById("assetList").innerHTML=assetHtml;
 document.getElementById("incAsset").innerHTML=data.assets.map(a=>`<option>${a.ticker}</option>`).join("");
@@ -117,14 +125,53 @@ document.getElementById("tradeList").innerHTML=data.trades.length?data.trades.sl
 function saveIncome(){let ticker=document.getElementById("incAsset").value,per=Number(document.getElementById("incPer").value),date=document.getElementById("incDate").value,status=document.getElementById("incStatus").value;if(!ticker||!per||!date){alert("Preencha ativo, valor por cota e data.");return}data.income.push({ticker,per,date,status,source:document.getElementById("incSource").value,qty:data.assets.find(a=>a.ticker===ticker)?.qty||0});persist();document.getElementById("incPer").value="";document.getElementById("incSource").value=""}
 function deleteIncome(i){data.income.splice(i,1);persist()}
 function openIncomeForm(){document.getElementById("incomeForm").scrollIntoView({behavior:"smooth"})}
-function saveTrade(){let broker=document.getElementById("tradeBroker").value,ticker=document.getElementById("tradeTicker").value.trim().toUpperCase(),type=document.getElementById("tradeType").value,date=document.getElementById("tradeDate").value,qty=Number(document.getElementById("tradeQty").value),price=Number(document.getElementById("tradePrice").value),fees=Number(document.getElementById("tradeFees").value||0);if(!ticker||!date||qty<=0||price<=0){alert("Preencha todos os campos corretamente.");return}let a=data.assets.find(x=>x.ticker===ticker&&x.broker===broker);let currency=broker==="Inter"?"USD":"BRL";if(!a){if(type==="venda"){alert("Esse ativo ainda não existe na carteira. Registre uma compra primeiro.");return}a={ticker,broker,qty:0,avg:0,price,currency,kind:"Outro"};data.assets.push(a)}if(type==="compra"){a.avg=(a.qty*a.avg+qty*price+fees)/(a.qty+qty);a.qty+=qty;a.price=price;a.marketValue=null}else{if(qty>a.qty){alert("Venda maior que a quantidade cadastrada.");return}a.qty-=qty;a.price=price;a.marketValue=null}data.trades.push({broker,ticker,type,date,qty,price,fees});persist();document.getElementById("tradeTicker").value="";document.getElementById("tradeQty").value="";document.getElementById("tradePrice").value="";document.getElementById("tradeFees").value="0"}
+function saveTrade(){let broker=document.getElementById("tradeBroker").value,ticker=document.getElementById("tradeTicker").value.trim().toUpperCase(),type=document.getElementById("tradeType").value,date=document.getElementById("tradeDate").value,qty=Number(document.getElementById("tradeQty").value),price=Number(document.getElementById("tradePrice").value),fees=Number(document.getElementById("tradeFees").value||0);if(!ticker||!date||qty<=0||price<=0){alert("Preencha todos os campos corretamente.");return}let a=data.assets.find(x=>x.ticker===ticker&&x.broker===broker);let currency=broker==="Inter"?"USD":"BRL";if(!a){if(type==="venda"){alert("Esse ativo ainda não existe na carteira. Registre uma compra primeiro.");return}const meta=data.lookupCache[ticker]||{};a={ticker,broker,qty:0,avg:0,price,currency,kind:meta.kind||"Outro",name:meta.name||ticker};data.assets.push(a)}if(type==="compra"){a.avg=(a.qty*a.avg+qty*price+fees)/(a.qty+qty);a.qty+=qty;a.price=price;a.marketValue=null}else{if(qty>a.qty){alert("Venda maior que a quantidade cadastrada.");return}a.qty-=qty;a.price=price;a.marketValue=null}data.trades.push({broker,ticker,type,date,qty,price,fees});persist();document.getElementById("tradeTicker").value="";document.getElementById("tradeQty").value="";document.getElementById("tradePrice").value="";document.getElementById("tradeFees").value="0"}
+async function lookupAsset(){
+ const ticker=(document.getElementById("lookupTicker").value||"").trim().toUpperCase();
+ const out=document.getElementById("lookupResult");
+ if(!ticker){out.textContent="Digite um ticker.";return}
+ out.textContent="Consultando Dados B3…";
+ try{
+   let r=await fetch("https://dadosb3.com/fiis/"+encodeURIComponent(ticker),{headers:{"Accept":"application/json"},cache:"no-store"});
+   let j=null,kind="FII";
+   if(r.ok){j=await r.json();}
+   else{
+     r=await fetch("https://dadosb3.com/empresas/"+encodeURIComponent(ticker),{headers:{"Accept":"application/json"},cache:"no-store"});
+     if(r.ok){j=await r.json();kind="Ação";}
+   }
+   if(!j){out.textContent="Ticker não encontrado nas rotas gratuitas consultadas. Confira o código. ETFs podem exigir chave na fonte.";return}
+   const name=j.cadastro?.nome||j.nome||j.ticker||ticker;
+   const price=j.dy_12m?.preco||null, dy=j.dy_12m?.dy_12m;
+   const pvp=(Array.isArray(j.pvp)&&j.pvp.length)?j.pvp[j.pvp.length-1].pvp:null;
+   data.lookupCache[ticker]={name,kind,source:"Dados B3",checkedAt:new Date().toISOString()};
+   localStorage.setItem("divpro_data",JSON.stringify(data));
+   out.innerHTML=`<b>${name}</b><br>${kind} · ${ticker}${price!==null?"<br>Preço de referência: "+money(price):""}${dy!==undefined?"<br>DY 12 meses: "+(dy*100).toFixed(2)+"%":""}${pvp!==null?"<br>P/VP: "+Number(pvp).toFixed(2):""}<br><span class="muted">Fonte: Dados B3 · <a href="https://dadosb3.com/${kind==="FII"?"fiis":"acoes"}/${ticker}" target="_blank">abrir ficha</a></span><br><button style="margin-top:9px" onclick="addAssetFromLookup('${ticker}')">Adicionar à carteira</button>`;
+ }catch(e){out.textContent="Não foi possível consultar no navegador. Pode haver bloqueio CORS ou indisponibilidade da API. Não vou inventar dados; abra a ficha online ou tente novamente."}
+}
+function addAssetFromLookup(ticker){
+ const broker=document.getElementById("lookupBroker").value, meta=data.lookupCache[ticker]||{};
+ if(data.assets.some(a=>a.ticker===ticker&&a.broker===broker)){alert("Esse ativo já está cadastrado nessa corretora.");return}
+ data.assets.push({ticker,broker,qty:0,avg:0,price:0,currency:"BRL",kind:meta.kind||"Outro",name:meta.name||ticker,marketValue:0});
+ persist();showTab("portfolio");
+ document.getElementById("lookupTicker").value=ticker;
+ document.getElementById("lookupResult").textContent="Ativo adicionado. Registre uma compra para preencher quantidade, preço médio e valor investido.";
+}
 async function refreshQuotes(){
-const status=document.getElementById("refreshStatus");status.textContent="Consultando serviço público de cotações…";
-let ok=0,fail=[];
-for(const a of data.assets){if(a.currency!=="BRL"||a.kind!=="FII")continue;
-try{let r=await fetch("https://brapi.dev/api/quote/"+encodeURIComponent(a.ticker),{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);let j=await r.json();let p=j.results?.[0]?.regularMarketPrice;if(!p)throw new Error("sem preço");a.price=Number(p);a.marketValue=null;ok++}catch(e){fail.push(a.ticker)}}
-data.lastRefresh=new Date().toISOString();localStorage.setItem("divpro_data",JSON.stringify(data));render();
-status.textContent=ok?`${ok} cotação(ões) atualizada(s). ${fail.length?"Sem retorno para: "+fail.join(", "):""} · ${new Date().toLocaleString("pt-BR")}`:`Não foi possível atualizar cotações agora (${fail.join(", ")||"serviço indisponível"}). Os últimos valores permanecem.`;
+ const status=document.getElementById("refreshStatus");status.textContent="Atualizando ativos brasileiros no Dados B3…";
+ let ok=0,fail=[];
+ for(const a of data.assets){
+  try{
+   const endpoint=a.kind==="FII"?"fiis/":"empresas/";
+   const r=await fetch("https://dadosb3.com/"+endpoint+encodeURIComponent(a.ticker),{headers:{"Accept":"application/json"},cache:"no-store"});
+   if(!r.ok)throw new Error("HTTP "+r.status);
+   const j=await r.json();
+   const price=j.dy_12m?.preco||null;
+   if(price){a.price=Number(price);a.marketValue=null;}
+   a.name=j.cadastro?.nome||j.nome||a.name||a.ticker;a.lastDataSource="Dados B3";a.lastDataAt=new Date().toISOString();ok++;
+  }catch(e){fail.push(a.ticker)}
+ }
+ data.lastRefresh=new Date().toISOString();localStorage.setItem("divpro_data",JSON.stringify(data));render();
+ status.textContent=ok?`${ok} ativo(s) consultado(s). ${fail.length?"Sem retorno: "+fail.join(", "):""} · ${new Date().toLocaleString("pt-BR")}`:"Consulta indisponível no navegador. Confira conexão, CORS e limite gratuito.";
 }
 function exportData(){let blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="backup-dividendos-pro.json";a.click();URL.revokeObjectURL(a.href)}
 function importData(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let d=JSON.parse(r.result);if(!d.assets||!d.income||!d.trades)throw 0;data=d;persist();alert("Backup importado.")}catch(x){alert("Arquivo de backup inválido.")}};r.readAsText(f)}
